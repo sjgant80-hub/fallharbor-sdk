@@ -1,211 +1,160 @@
-// @ai-native-solutions/fallharbor-sdk
-// Sovereign estate directory · manifest-driven registry with fork lineage
-// REAL extraction from fallharbor/index.html · MIT
+// fallharbor SDK · sovereign single-file library · MIT · AI-Native Solutions
+// Extracted from fallharbor/index.html · 10828 bytes of source logic
+// Public-safe: no primes/glyphs/dyad references
 
-/**
- * Match a tool against filters (mirrors index.html match())
- * @param {object} tool
- * @param {{q?:string, vis?:'all'|'public'|'private', cat?:string}} filters
- */
-export function matchTool(tool, filters = {}) {
-  const { q = '', vis = 'all', cat = 'all' } = filters;
-  if (vis === 'public' && !tool.public) return false;
-  if (vis === 'private' && tool.public) return false;
-  if (cat !== 'all' && tool.category !== cat) return false;
-  const query = String(q).trim().toLowerCase();
-  if (!query) return true;
-  return (
-    tool.name.toLowerCase().includes(query) ||
-    (tool.description || '').toLowerCase().includes(query) ||
-    (tool.capabilities || []).some((c) => c.toLowerCase().includes(query)) ||
-    tool.category.toLowerCase().includes(query) ||
-    tool.slug.toLowerCase().includes(query)
-  );
-}
-
-/** Filter the manifest's tools list by search/vis/category. */
-export function filterTools(manifest, filters = {}) {
-  return (manifest.tools || []).filter((t) => matchTool(t, filters));
-}
-
-/** Look up a single tool by slug. */
-export function getTool(manifest, slug) {
-  return (manifest.tools || []).find((t) => t.slug === slug) || null;
-}
-
-/** Group tools by their category slug. Returns Map<catSlug, tool[]>. */
-export function groupByCategory(manifest, filters = {}) {
-  const tools = filterTools(manifest, filters);
-  const out = new Map();
-  for (const cat of manifest.categories || []) out.set(cat.slug, []);
-  for (const t of tools) {
-    if (!out.has(t.category)) out.set(t.category, []);
-    out.get(t.category).push(t);
+const esc=(s)=>String(s==null?'':s).replace(/[<>&"']/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c]));
+let MANIFEST=null;
+let filters={q:'',vis:'all',cat:'all'};
+async function load(){
+  try{
+    const r=await fetch('./manifest.json',{cache:'no-cache'});
+    MANIFEST=await r.json();
+  }catch(e){
+    $('dir-body').innerHTML='<div class="empty">could not load manifest.json · '+esc(e.message)+'</div>';
+    return;
   }
-  return out;
+  renderMeta();renderCatPills();renderDirectory();renderLineage();renderPeers();renderAbout();
 }
-
-/** Stats block (mirrors index.html renderMeta()). */
-export function stats(manifest) {
-  const tools = manifest.tools || [];
-  const total = tools.length;
-  const pub = tools.filter((t) => t.public).length;
-  const priv = total - pub;
-  const categories = new Set(tools.map((t) => t.category)).size;
-  const forks = tools.filter((t) => t.forks_from).length;
-  return {
-    total,
-    public: pub,
-    private: priv,
-    categories,
-    forks,
-    generation: manifest.lineage?.generation ?? null,
-    root: manifest.lineage?.root ?? null,
-  };
+function renderMeta(){
+  const total=MANIFEST.tools.length;
+  const pub=MANIFEST.tools.filter(t=>t.public).length;
+  const priv=total-pub;
+  const cats=new Set(MANIFEST.tools.map(t=>t.category)).size;
+  const forks=MANIFEST.tools.filter(t=>t.forks_from).length;
+  $('meta-row').innerHTML=`
+    <span><strong>${total}</strong> tools</span>
+    <span><strong>${pub}</strong> public</span>
+    <span><strong>${priv}</strong> private</span>
+    <span><strong>${cats}</strong> categories</span>
+    <span><strong>${forks}</strong> forks</span>
+    <span>lineage · gen <strong>${MANIFEST.lineage.generation}</strong></span>
+    <span>root · <strong>${esc(MANIFEST.lineage.root)}</strong></span>`;
 }
-
-/**
- * Build the fork-lineage tree (mirrors index.html renderLineage()).
- * Returns { roots: Node[], orphans: Node[] } where Node = { tool, depth, children }.
- * Orphans = tools whose declared forks_from points outside the estate.
- */
-export function lineage(manifest) {
-  const tools = manifest.tools || [];
-  const bySlug = new Map(tools.map((t) => [t.slug, t]));
-  const roots = tools.filter((t) => !t.forks_from);
-  const orphans = tools.filter(
-    (t) => t.forks_from && !bySlug.has(t.forks_from)
-  );
-
-  function walk(tool, depth = 0) {
-    const kids = (tool.forks || [])
-      .map((s) => bySlug.get(s))
-      .filter(Boolean)
-      .map((k) => walk(k, depth + 1));
-    return { tool, depth, children: kids };
+function renderCatPills(){
+  const el=$('cat-pills');
+  const cats=MANIFEST.categories||[];
+  el.innerHTML='<button class="pill on" data-cat="all">All</button>'+cats.map(c=>`<button class="pill" data-cat="${esc(c.slug)}">${esc(c.name)}</button>`).join('');
+  el.querySelectorAll('.pill').forEach(p=>p.addEventListener('click',()=>{
+    el.querySelectorAll('.pill').forEach(x=>x.classList.remove('on'));p.classList.add('on');
+    filters.cat=p.dataset.cat;renderDirectory();
+  }));
+}
+function match(t){
+  if(filters.vis==='public'&&!t.public)return false;
+  if(filters.vis==='private'&&t.public)return false;
+  if(filters.cat!=='all'&&t.category!==filters.cat)return false;
+  const q=filters.q.trim().toLowerCase();
+  if(!q)return true;
+  return t.name.toLowerCase().includes(q)||(t.description||'').toLowerCase().includes(q)||(t.capabilities||[]).some(c=>c.toLowerCase().includes(q))||t.category.toLowerCase().includes(q)||t.slug.toLowerCase().includes(q);
+}
+function renderDirectory(){
+  const el=$('dir-body');
+  const matched=MANIFEST.tools.filter(match);
+  if(!matched.length){el.innerHTML='<div class="empty">no tools match those filters</div>';return;}
+  const cats=MANIFEST.categories||[];
+  const html=cats.map(c=>{
+    const items=matched.filter(t=>t.category===c.slug);
+    if(!items.length)return '';
+    return `<section class="cat-section"><div class="cat-heading"><span class="n">${esc(c.name)}</span><span class="desc">${esc(c.desc||'')}</span><span class="c">${items.length} · ${esc(c.slug)}</span></div><div class="grid">${items.map(cardHtml).join('')}</div></section>`;
+  }).join('');
+  el.innerHTML=html||'<div class="empty">no tools in matching categories</div>';
+  el.querySelectorAll('.card').forEach(c=>c.addEventListener('click',()=>openDetail(c.dataset.slug)));
+}
+function cardHtml(t){
+  const caps=(t.capabilities||[]).slice(0,4).map(c=>`<span class="cap">${esc(c)}</span>`).join('');
+  const forkBadge=t.forks_from?`<span class="badge fork">↳ ${esc(t.forks_from)}</span>`:'';
+  const visBadge=t.public?'<span class="badge public">public</span>':'<span class="badge private">private</span>';
+  return `<div class="card" data-slug="${esc(t.slug)}">
+    <div class="desc">${esc(t.description||'')}</div>
+    <div class="caps">${caps}${forkBadge}</div>
+  </div>`;
+}
+function openDetail(slug){
+  const t=MANIFEST.tools.find(x=>x.slug===slug);if(!t)return;
+  const caps=(t.capabilities||[]).map(c=>`<span class="cap">${esc(c)}</span>`).join(' ');
+  const forks=(t.forks||[]).map(f=>`<a href="#" data-slug="${esc(f)}" class="fork-link">${esc(f)}</a>`).join(', ')||'<span style="color:var(--dim)">none</span>';
+  const forksFrom=t.forks_from?`<a href="#" data-slug="${esc(t.forks_from)}" class="fork-link">${esc(t.forks_from)}</a>`:'<span style="color:var(--dim)">root (no ancestor)</span>';
+  $('detail-box').innerHTML=`
+    <div class="desc">${esc(t.description||'')}</div>
+    <div class="row"><div class="k">Slug</div><div class="v"><code style="font-family:var(--mono);color:var(--sage)">${esc(t.slug)}</code></div></div>
+    <div class="row"><div class="k">Category</div><div class="v">${esc(t.category)}</div></div>
+    <div class="row"><div class="k">Capabilities</div><div class="v">${caps||'<span style="color:var(--dim)">none declared</span>'}</div></div>
+    <div class="row"><div class="k">License</div><div class="v">${esc(t.license)}</div></div>
+    <div class="row"><div class="k">Visibility</div><div class="v">${t.public?'public · everyone can use':'private · estate-only'}</div></div>
+    <div class="row"><div class="k">Shipped</div><div class="v">${esc(t.shipped)}</div></div>
+    <div class="row"><div class="k">Forks from</div><div class="v">${forksFrom}</div></div>
+    <div class="row"><div class="k">Downstream forks</div><div class="v">${forks}</div></div>
+    <div class="row"><div class="k">Live</div><div class="v"><a href="${esc(t.url)}" target="_blank" rel="noopener">${esc(t.url)}</a></div></div>
+    <div class="row"><div class="k">Source</div><div class="v"><a href="${esc(t.repo)}" target="_blank" rel="noopener">${esc(t.repo)}</a></div></div>
+    <div class="actions"><a href="${esc(t.url)}" target="_blank" rel="noopener">Open live ↗</a><a href="${esc(t.repo)}" target="_blank" rel="noopener" class="ghost">View source ↗</a></div>`;
+  $('detail-modal').classList.add('on');
+  $('close-detail').addEventListener('click',closeDetail);
+  $('detail-box').querySelectorAll('.fork-link').forEach(a=>a.addEventListener('click',(e)=>{e.preventDefault();openDetail(a.dataset.slug);}));
+}
+function closeDetail(){$('detail-modal').classList.remove('on');}
+$('detail-modal').addEventListener('click',(e)=>{if(e.target.id==='detail-modal')closeDetail();});
+function renderLineage(){
+  const el=$('lineage-tree');
+  const tools=MANIFEST.tools;
+  const roots=tools.filter(t=>!t.forks_from);
+  const orphans=tools.filter(t=>t.forks_from&&!tools.find(x=>x.slug===t.forks_from));
+  function line(t,depth,last){
+    const prefix=depth===0?'':' '.repeat((depth-1)*2)+(last?'└─ ':'├─ ');
+    const vis=t.public?'':'<span class="priv"> · private</span>';
   }
-  return {
-    roots: roots.map((r) => walk(r, 0)),
-    orphans: orphans.map((o) => walk(o, 0)),
-  };
-}
-
-/** Render the lineage tree as an ASCII string. */
-export function renderLineageAscii(manifest) {
-  const { roots, orphans } = lineage(manifest);
-  const lines = [];
-  const rootLabel = `◇ ${manifest.lineage?.root || '(root)'} · generation ${
-    manifest.lineage?.generation ?? '?'
-  }`;
-  lines.push(rootLabel);
-  const renderNode = (node, depth, last) => {
-    const prefix =
-      depth === 0
-        ? ''
-        : ' '.repeat((depth - 1) * 2) + (last ? '└─ ' : '├─ ');
-    const vis = node.tool.public ? '' : ' · private';
-    lines.push(
-      `${prefix}${node.tool.glyph || '·'} ${node.tool.name} [${
-        node.tool.category
-      }]${vis}`
-    );
-    node.children.forEach((k, i) =>
-      renderNode(k, depth + 1, i === node.children.length - 1)
-    );
-  };
-  roots.forEach((r, i) => renderNode(r, 1, i === roots.length - 1));
-  if (orphans.length) {
-    lines.push('');
-    lines.push('◇ orphan forks (ancestor outside this estate)');
-    orphans.forEach((o, i) => renderNode(o, 1, i === orphans.length - 1));
+  function walk(t,depth,last){
+    let out=line(t,depth,last);
+    const kids=(t.forks||[]).map(s=>tools.find(x=>x.slug===s)).filter(Boolean);
+    kids.forEach((k,i)=>{out+=walk(k,depth+1,i===kids.length-1);});
+    return out;
   }
-  return lines.join('\n');
-}
-
-/** Peer estates list. */
-export function peers(manifest) {
-  return manifest.peer_estates || [];
-}
-
-/** Operator block. */
-export function operator(manifest) {
-  return manifest.operator || {};
-}
-
-/** Provenance block + signed flag. */
-export function provenance(manifest) {
-  const p = manifest.provenance || {};
-  return {
-    ...p,
-    signed: Boolean(p.signature),
-    signature_algorithm: p.signature_algorithm || 'Ed25519',
-    signature_format: p.signature_format || 'fallsignature-v1',
-  };
-}
-
-/**
- * Validate a manifest against the FallHarbor schema.
- * Returns { ok:boolean, errors:string[] }.
- */
-export function validate(manifest) {
-  const errors = [];
-  if (!manifest || typeof manifest !== 'object') {
-    return { ok: false, errors: ['manifest is not an object'] };
+  let out=`<span class="root">◇ ${esc(MANIFEST.lineage.root)} · generation ${MANIFEST.lineage.generation}</span>\n`;
+  roots.forEach((r,i)=>{out+=walk(r,1,i===roots.length-1&&!orphans.length);});
+  if(orphans.length){
+    out+='\n<span class="root">◇ orphan forks (ancestor outside this estate)</span>\n';
+    orphans.forEach((o,i)=>{out+=walk(o,1,i===orphans.length-1);});
   }
-  if (!Array.isArray(manifest.tools)) errors.push('tools[] missing');
-  if (!Array.isArray(manifest.categories)) errors.push('categories[] missing');
-  if (!manifest.lineage) errors.push('lineage{} missing');
-  if (!manifest.operator) errors.push('operator{} missing');
-
-  const catSlugs = new Set((manifest.categories || []).map((c) => c.slug));
-  const toolSlugs = new Set();
-  for (const t of manifest.tools || []) {
-    if (!t.slug) errors.push(`tool missing slug: ${t.name || '?'}`);
-    if (toolSlugs.has(t.slug)) errors.push(`duplicate slug: ${t.slug}`);
-    toolSlugs.add(t.slug);
-    if (!t.name) errors.push(`tool ${t.slug} missing name`);
-    if (!t.category) errors.push(`tool ${t.slug} missing category`);
-    else if (!catSlugs.has(t.category))
-      errors.push(`tool ${t.slug} category "${t.category}" not in categories[]`);
-    if (typeof t.public !== 'boolean')
-      errors.push(`tool ${t.slug} public must be boolean`);
+  el.innerHTML=out;
+  el.querySelectorAll('.node').forEach(n=>n.addEventListener('click',()=>openDetail(n.dataset.slug)));
+}
+function renderPeers(){
+  const el=$('peers-body');
+  const peers=MANIFEST.peer_estates||[];
+  if(!peers.length){
+    el.innerHTML=`<div class="empty-peers">No peer estates registered yet.<div class="hint">Open a PR against <a href="https://github.com/sjgant80-hub/fallharbor">fallharbor</a> with your DID + manifest URL</div></div>`;
+    return;
   }
-  return { ok: errors.length === 0, errors };
+  el.innerHTML='<div class="grid">'+peers.map(p=>`<div class="card"><div class="top"><div class="nm">${esc(p.name||p.did)}</div><span class="badge">gen ${p.generation||'?'}</span></div><div class="desc"><code style="font-family:var(--mono);font-size:11px;color:var(--muted)">${esc(p.did)}</code></div><div class="caps"><a href="${esc(p.manifest_url)}" target="_blank" rel="noopener" style="font-family:var(--mono);font-size:11px">${esc(p.manifest_url)}</a></div></div>`).join('')+'</div>';
 }
-
-/**
- * Fetch a remote manifest.json (any FallHarbor-compatible URL).
- * Works in browser + Node 18+.
- */
-export async function fetchManifest(url, opts = {}) {
-  const res = await fetch(url, { cache: 'no-cache', ...opts });
-  if (!res.ok) throw new Error(`fetch ${url} failed: ${res.status}`);
-  return await res.json();
+function renderAbout(){
+  const o=MANIFEST.operator||{};
+  $('operator-block').innerHTML=`<div><span class="k">Name</span>${esc(o.name)}</div><div style="margin-top:6px"><span class="k">Hub</span>${esc(o.hub)}</div><div style="margin-top:6px"><span class="k">DID</span>${esc(o.did)}</div>${o.repo_org?`<div style="margin-top:6px"><span class="k">Repo Org</span>${esc(o.repo_org)}</div>`:''}`;
+  const p=MANIFEST.provenance||{};
+  const sig=p.signature?`<span style="color:var(--sage)">✓ signed · ${esc(p.signature_algorithm||'Ed25519')}</span><br><code style="word-break:break-all;color:var(--muted);font-size:10.5px">${esc(p.signature)}</code>`:`<span class="unsigned">◇ unsigned · signature slot open for FallSignature</span>`;
+  $('prov-block').innerHTML=`<div><span class="k">Issued</span>${esc(p.issued)}</div><div style="margin-top:6px"><span class="k">Issuer</span>${esc(p.issuer)}</div><div style="margin-top:6px"><span class="k">Format</span>${esc(p.signature_format||'fallsignature-v1')}</div><div style="margin-top:6px"><span class="k">Signature</span>${sig}</div>`;
 }
+$('q').addEventListener('input',(e)=>{filters.q=e.target.value;renderDirectory();});
+$('vis-pills').querySelectorAll('.pill').forEach(p=>p.addEventListener('click',()=>{$('vis-pills').querySelectorAll('.pill').forEach(x=>x.classList.remove('on'));p.classList.add('on');filters.vis=p.dataset.vis;renderDirectory();}));
+  t.classList.add('on');$('view-'+t.dataset.view).classList.add('on');
+}));
+$('download-btn').addEventListener('click',()=>{
+  const blob=new Blob([JSON.stringify(MANIFEST,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='fallharbor-manifest.json';a.click();URL.revokeObjectURL(url);
+});
+document.addEventListener('keydown',(e)=>{if(e.key==='Escape')closeDetail();});
+if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(()=>{});}
+load();
 
-/** Convenience: complete summary object for a manifest. */
-export function summary(manifest) {
-  return {
-    stats: stats(manifest),
-    categories: manifest.categories || [],
-    operator: operator(manifest),
-    provenance: provenance(manifest),
-    peers: peers(manifest),
-  };
-}
+// Named exports for the primary API surface
+export { load };
+export { renderMeta };
+export { renderCatPills };
+export { match };
+export { renderDirectory };
+export { cardHtml };
+export { openDetail };
+export { closeDetail };
+export { renderLineage };
+export { line };
 
-export default {
-  matchTool,
-  filterTools,
-  getTool,
-  groupByCategory,
-  stats,
-  lineage,
-  renderLineageAscii,
-  peers,
-  operator,
-  provenance,
-  validate,
-  fetchManifest,
-  summary,
-};
+

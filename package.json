@@ -1,25 +1,24 @@
 {
   "name": "@ai-native-solutions/fallharbor-sdk",
   "version": "1.0.0",
-  "description": "FallHarbor SDK · sovereign estate directory · manifest-driven registry with fork lineage",
+  "description": "fallharbor SDK · sovereign single-file library extracted from fallharbor/index.html",
   "type": "module",
   "main": "src/index.js",
-  "exports": {
-    ".": "./src/index.js"
-  },
-  "files": ["src", "README.md", "LICENSE"],
+  "types": "src/index.d.ts",
+  "files": ["src", "docs", "README.md", "LICENSE"],
   "scripts": {
-    "test": "node -e \"import('./src/index.js').then(m=>{const fx={tools:[{slug:'a',name:'A',category:'core',public:true,capabilities:['x'],forks:['b']},{slug:'b',name:'B',category:'core',public:false,forks_from:'a'}],categories:[{slug:'core',name:'Core'}],lineage:{root:'test',generation:1},operator:{name:'op'},provenance:{}};console.log(JSON.stringify(m.summary(fx),null,2));console.log(m.renderLineageAscii(fx));const v=m.validate(fx);if(!v.ok){console.error(v.errors);process.exit(1)}console.log('SDK smoke OK')})\""
+    "test": "node --test test/",
+    "smoke": "node examples/smoke.js"
   },
-  "keywords": ["fallharbor", "estate", "directory", "manifest", "lineage", "sovereign", "ai-native"],
+  "keywords": ["fallharbor", "sdk", "sovereign", "ai-native-solutions"],
   "author": "AI-Native Solutions",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/sjgant80-hub/fallharbor-sdk.git"
+    "url": "https://github.com/sjgant80-hub/fallharbor-sdk.git"
   },
   "homepage": "https://sjgant80-hub.github.io/fallharbor-sdk/",
-  "engines": {
-    "node": ">=18"
+  "publishConfig": {
+    "access": "public"
   }
 }
