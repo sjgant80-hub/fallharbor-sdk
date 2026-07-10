@@ -1,23 +1,20 @@
 {
   "name": "@ai-native-solutions/fallharbor-sdk",
   "version": "1.0.0",
-  "description": "fallharbor SDK · sovereign single-file library extracted from fallharbor/index.html",
+  "description": "Companion SDK for fallharbor · minted by mint-all · sovereign estate",
   "type": "module",
   "main": "src/index.js",
-  "types": "src/index.d.ts",
-  "files": ["src", "docs", "README.md", "LICENSE"],
-  "scripts": {
-    "test": "node --test test/",
-    "smoke": "node examples/smoke.js"
-  },
-  "keywords": ["fallharbor", "sdk", "sovereign", "ai-native-solutions"],
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
   "author": "AI-Native Solutions",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/sjgant80-hub/fallharbor-sdk.git"
   },
-  "homepage": "https://sjgant80-hub.github.io/fallharbor-sdk/",
   "publishConfig": {
     "access": "public"
   }
